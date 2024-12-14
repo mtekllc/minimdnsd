@@ -568,7 +568,7 @@ static void handle_message_recv(int sock, int is_resolver)
         for (cmsg = CMSG_FIRSTHDR(&msghdr); cmsg != NULL; cmsg = CMSG_NXTHDR(&msghdr, cmsg)) {
                 // ignore the control headers that don't match what we want
                 // see https://stackoverflow.com/a/5309155/2926815
-                if (cmsg->cmsg_type != IP_PKTINFO ||
+                if (cmsg->cmsg_type != IP_PKTINFO &&
                         (cmsg->cmsg_type != IPV6_PKTINFO || cmsg->cmsg_type != IPV6_RECVPKTINFO)) {
                         continue;
                 }
@@ -595,6 +595,11 @@ static void handle_message_recv(int sock, int is_resolver)
                         addr_type = IPPROTO_IPV6;
                 }
 #endif
+        }
+
+        if (!in_any) {
+                fprintf(stderr, "error: no ipv4/6 address set\n");
+                return; // insufficient source address info
         }
 
         uint16_t * psr = (uint16_t*) buffer;
@@ -663,6 +668,7 @@ static void handle_message_recv(int sock, int is_resolver)
                         && (dotlen == hostnamelen)
                         && (memcmp(hostname, path, dotlen) == 0)) {
                         respond(sock, &sender, sl, record_type, addr_type, xactionid, namestartptr, stlen, in_any);
+                        found = 1;
                 }
         }
 
