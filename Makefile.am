@@ -5,7 +5,7 @@ SOURCES := $(shell find $(SOURCEDIR) -name '*.c')
 OBJS = $(patsubst src/%.c,obj/%.o,$(SOURCES))
 
 # overwrite c flags to enable debugging
-CFLAGS+=-Wall
+CFLAGS+=-Wall -Wno-unused-but-set-variable
 
 all: bin/$(PACKAGE)
 

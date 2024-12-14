@@ -174,7 +174,7 @@ CC = /home/mike/btu/solidswitch/ng/br-2023.05-2330-target/output/host/bin/arm-bu
 CCDEPMODE = depmode=none
 
 # overwrite c flags to enable debugging
-CFLAGS = -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64  -Os -g0 -D_FORTIFY_SOURCE=1 -Wall
+CFLAGS = -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64  -Os -g0 -D_FORTIFY_SOURCE=1 -Wall -Wno-unused-but-set-variable
 CPPFLAGS = -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64
 CSCOPE = cscope
 CTAGS = ctags

@@ -92,8 +92,8 @@ static int resolver = 0;
 struct sockaddr_in sin_multicast = {
         .sin_family = AF_INET,
         .sin_addr =
-        { MDNS_BRD_ADDR},
-        .sin_port = 0 // will get filled in at main()
+        {MDNS_BRD_ADDR},
+        .sin_port = 0
 };
 
 /**
@@ -114,7 +114,7 @@ static void initialize_hostname(void)
                         hostnamelen = HOST_NAME_MAX - 1;
                 }
                 memcpy(hostname, hostname_override, hostnamelen);
-                printf("using overridden name: \"%s.local\"\n", hostname);
+                printf("using hostname from command line argument: \"%s.local\"\n", hostname);
                 return;
         }
 
@@ -194,7 +194,8 @@ static void multicast_addr_add(struct in_addr * saddr)
                 .imr_interface = *saddr
         };
 
-        if (setsockopt(sdsock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *) &mreq, sizeof(mreq)) == -1) {
+        if (setsockopt(sdsock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *) &mreq,
+                        sizeof(mreq)) == -1) {
                 char * addr = inet_ntoa(*saddr);
                 fprintf(stderr, "warning: could not join membership to %s / code %d (%s)\n",
                         addr, errno, strerror(errno));
@@ -401,7 +402,21 @@ uint8_t * mdns_path_parse(uint8_t *baseptr, uint8_t *eptr, char *topop, int *len
         return baseptr;
 }
 
-static void respond(int sock, struct sockaddr_in6 *sender, int sl, int record_type, int addr_type, uint16_t xactionid, char *namestartptr, int stlen, void *in_any)
+/**
+ * @brief fabricate a response to request that matched our name
+ *
+ * @param sock
+ * @param sender
+ * @param sl
+ * @param record_type
+ * @param addr_type
+ * @param xactionid
+ * @param namestartptr
+ * @param stlen
+ * @param in_any
+ */
+static void respond(int sock, struct sockaddr_in6 *sender, int sl, int record_type,
+        int addr_type, uint16_t xactionid, uint8_t *str_name, int str_name_len, void *in_any)
 {
         uint8_t outbuff[MAX_MDNS_PATH * 2 + 128];
         uint8_t *obptr = outbuff;
@@ -416,89 +431,91 @@ static void respond(int sock, struct sockaddr_in6 *sender, int sl, int record_ty
         int sendAAAA = 0;
 #endif
 
+        if (!sendA && !sendAAAA) {
+                return;
+        }
+
+        // for ipv4 or 6 responses we always have this in common
         if (sendA || sendAAAA) {
                 *(obb++) = xactionid;
-                *(obb++) = htons(0x8400); //Authortative response.
+                *(obb++) = htons(0x8400); // authortative response.
                 *(obb++) = 0;
-                *(obb++) = htons(1); //1 answer.
+                *(obb++) = htons(1); // 1 answer.
                 *(obb++) = 0;
                 *(obb++) = 0;
 
                 obptr = (uint8_t*) obb;
 
                 // Answer
-                memcpy(obptr, namestartptr, stlen + 1); //Hack: Copy the name in.
-                obptr += stlen + 1;
+                memcpy(obptr, str_name, str_name_len + 1);
+                obptr += str_name_len + 1;
                 *(obptr++) = 0;
                 *(obptr++) = 0x00;
                 *(obptr++) = (sendA ? 0x01 : 0x1c); // A record
                 *(obptr++) = 0x80;
-                *(obptr++) = 0x01; //Flush cache + in ptr.
+                *(obptr++) = 0x01; // flush cache + in ptr.
                 *(obptr++) = 0x00;
-                *(obptr++) = 0x00; //TTL
+                *(obptr++) = 0x00; // TTL
                 *(obptr++) = 0x00;
-                *(obptr++) = 240; //240 seconds (4 minutes)
+                *(obptr++) = 240; // 240 seconds (4 minutes)
         }
 
+        // but if 4
         if (sendA) {
                 *(obptr++) = 0x00;
-                *(obptr++) = 0x04; //Size 4 (IP)
-                //
-                struct in_addr *local_addr_4 = in_any;
+                *(obptr++) = 0x04; // Size 4 (IP)
                 memcpy(obptr, &local_addr_4->s_addr, 4);
                 obptr += 4;
         }
 #if (DISABLE_IPV6 == 0)
         else if (sendAAAA) {
                 *(obptr++) = 0x00;
-                *(obptr++) = 0x10; //Size 16 (IPv6)
+                *(obptr++) = 0x10; // Size 16 (IPv6)
                 memcpy(obptr, &local_addr_6->s6_addr, 16);
                 obptr += 16;
         }
 #endif
 
-        if (sendA || sendAAAA) {
-                sendto(sock, outbuff, obptr - outbuff, MSG_NOSIGNAL, (struct sockaddr*)sender, sl);
+        sendto(sock, outbuff, obptr - outbuff, MSG_NOSIGNAL, (struct sockaddr*)sender, sl);
 
-                // use another socket to send the response
-                int socks_to_send = socket(AF_INET, SOCK_DGRAM, 0);
-                //struct ip_mreqn txif = { 0 };
-                //txif.imr_multiaddr.s_addr = MDNS_BRD_ADDR;
-                //txif.imr_address.s_addr = local_addr_4.s_addr;
-                //txif.imr_ifindex = rxinterface;
-                //rxinterface = rxinterface; // we aren't using this now, see note below
+        // use another socket to send the response
+        int socks_to_send = socket(AF_INET, SOCK_DGRAM, 0);
+        //struct ip_mreqn txif = { 0 };
+        //txif.imr_multiaddr.s_addr = MDNS_BRD_ADDR;
+        //txif.imr_address.s_addr = local_addr_4.s_addr;
+        //txif.imr_ifindex = rxinterface;
+        //rxinterface = rxinterface; // we aren't using this now, see note below
+        // With IP_MULTICAST_IF you can either pass in an ip_mreqn, or just the local_addr4
 
-                // With IP_MULTICAST_IF you can either pass in an ip_mreqn, or just the local_addr4
-
-                // We tried to do the full txif for clarity / example but, it seems to cause issues?
-                if (setsockopt(socks_to_send, IPPROTO_IP, IP_MULTICAST_IF, local_addr_4, sizeof(struct in_addr)) != 0) {
-                        fprintf(stderr, "warning: could not set IP_MULTICAST_IF for reply\n");
-                }
-
-                int optval = 1;
-                if (setsockopt(socks_to_send, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof( optval)) != 0) {
-                        fprintf(stderr, "warning: could not set SO_REUSEPORT for reply\n");
-                }
-
-                struct sockaddr_in sin = {
-                        .sin_family = AF_INET,
-                        .sin_addr =
-                        { INADDR_ANY},
-                        .sin_port = htons(MDNS_PORT)
-                };
-
-                if (bind(socks_to_send, (struct sockaddr *) &sin, sizeof(sin)) == -1) {
-                        fprintf(stderr, "warning: when sending reply, "
-                                "could not bind to IPv4 MDNS port (%d %s)\n", errno, strerror(errno));
-                }
-
-                if (sendto(socks_to_send, outbuff, obptr - outbuff, MSG_NOSIGNAL,
-                        (struct sockaddr*) &sin_multicast, sizeof(sin_multicast)) != obptr - outbuff) {
-                        fprintf(stderr, "warning: could not send multicast reply for MDNS query\n");
-                }
-
-                close(socks_to_send);
+        // we tried to do the full txif for clarity / example but, it seems to cause issues?
+        if (setsockopt(socks_to_send, IPPROTO_IP, IP_MULTICAST_IF, local_addr_4, sizeof(struct in_addr)) != 0) {
+                fprintf(stderr, "warning: could not set IP_MULTICAST_IF for reply\n");
         }
+
+        int optval = 1;
+        if (setsockopt(socks_to_send, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof( optval)) != 0) {
+                fprintf(stderr, "warning: could not set SO_REUSEPORT for reply\n");
+        }
+
+        struct sockaddr_in sin = {
+                .sin_family = AF_INET,
+                .sin_addr =
+                { INADDR_ANY},
+                .sin_port = htons(MDNS_PORT)
+        };
+
+        if (bind(socks_to_send, (struct sockaddr *) &sin, sizeof(sin)) == -1) {
+                fprintf(stderr, "warning: when sending reply, "
+                        "could not bind to IPv4 MDNS port (%d %s)\n", errno, strerror(errno));
+        }
+
+        if (sendto(socks_to_send, outbuff, obptr - outbuff, MSG_NOSIGNAL,
+                (struct sockaddr*) &sin_multicast, sizeof(sin_multicast)) != obptr - outbuff) {
+                fprintf(stderr, "warning: could not send multicast reply for MDNS query\n");
+        }
+
+        close(socks_to_send);
+
 }
 
 static void handle_message_recv(int sock, int is_resolver)
@@ -510,12 +527,11 @@ static void handle_message_recv(int sock, int is_resolver)
         uint8_t cmbuf[1024] = {0};
         struct sockaddr_in6 sender = {0};
         struct in_addr local_addr_4 = {0};
-        int rxinterface = 0;
         int addr_type = 0; // none
-        int ipv4_valid = 0;
+        void *in_any = NULL;
+        struct cmsghdr *cmsg = NULL;
 #if (DISABLE_IPV6 == 0)
         struct in6_addr local_addr_6 = {0};
-        int ipv6_valid = 0;
 #endif
         socklen_t sl = sizeof(sender);
 
@@ -549,57 +565,38 @@ static void handle_message_recv(int sock, int is_resolver)
                 return; // runt packet
         }
 
-        void *in_any = NULL;
-
-        for (struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msghdr);
-                cmsg != NULL;
-                cmsg = CMSG_NXTHDR(&msghdr, cmsg)) {
+        for (cmsg = CMSG_FIRSTHDR(&msghdr); cmsg != NULL; cmsg = CMSG_NXTHDR(&msghdr, cmsg)) {
                 // ignore the control headers that don't match what we want
                 // see https://stackoverflow.com/a/5309155/2926815
-                if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_PKTINFO) {
+                if (cmsg->cmsg_type != IP_PKTINFO ||
+                        (cmsg->cmsg_type != IPV6_PKTINFO || cmsg->cmsg_type != IPV6_RECVPKTINFO)) {
+                        continue;
+                }
+                if (cmsg->cmsg_level == IPPROTO_IP) {
                         struct in_pktinfo * pi = (struct in_pktinfo *) CMSG_DATA(cmsg);
                         // at this point, peeraddr is the source sockaddr
                         // pi->ipi_spec_dst is the destination in_addr
                         // pi->ipi_addr is the destination address, in_addr
                         local_addr_4 = pi->ipi_spec_dst;
                         in_any = &pi->ipi_spec_dst;
-                        rxinterface = pi->ipi_ifindex;
                         // pi->ipi_addr is actually the multicast address
-                        ipv4_valid = 1;
                         addr_type = IPPROTO_IP;
                 }
 #if (DISABLE_IPV6 == 0)
-                else if (cmsg->cmsg_level == IPPROTO_IPV6 &&
-                        (cmsg->cmsg_type == IPV6_PKTINFO || cmsg->cmsg_type == IPV6_RECVPKTINFO)) {
+                else if (cmsg->cmsg_level == IPPROTO_IPV6) {
                         // note: some build platforms do not include this.
                         struct in6_pktinfo_shadow {
                                 struct in6_addr ipi6_addr; /* src/dst IPv6 address */
                                 unsigned int ipi6_ifindex; /* send/recv interface index */
                         };
-
                         struct in6_pktinfo_shadow * pi = (struct in6_pktinfo_shadow *) CMSG_DATA(cmsg);
-
                         local_addr_6 = pi->ipi6_addr;
                         in_any = &pi->ipi6_addr;
-                        ipv6_valid = 1;
                         addr_type = IPPROTO_IPV6;
-                        rxinterface = pi->ipi6_ifindex;
-
-                        //int i;
-                        //for( i = 0; i < sizeof( local_addr_6 ); i++ )
-                        //	printf( "%02x", ((uint8_t*)&local_addr_6)[i] );
-                        //printf( "\n" );
                 }
 #endif
         }
 
-        // note: if ipv4 is valid, that means the ipv6 address is not to be trusted
-        // it's the broadcast address.
-#if (DISABLE_IPV6 == 0)
-        if (ipv4_valid) {
-                ipv6_valid = 0;
-        }
-#endif
         uint16_t * psr = (uint16_t*) buffer;
         uint16_t xactionid = ntohs(psr[0]);
         uint16_t flags = ntohs(psr[1]);
@@ -715,8 +712,9 @@ static void handle_message_recv(int sock, int is_resolver)
 
                                         // If the packet is a reply, not a question, we can forward it back to the asker.
                                         uint16_t flags = ntohs(((uint16_t*) buffer)[1]);
-                                        if ((flags & 0x8000))
+                                        if ((flags & 0x8000)) {
                                                 sendto(sock, buffer, r, MSG_NOSIGNAL, (struct sockaddr*) &sender, sl);
+                                        }
                                 }
 
                                 close(socks_to_send);
@@ -727,7 +725,7 @@ static void handle_message_recv(int sock, int is_resolver)
                         // we want to make them go away
                         uint16_t * psr = (uint16_t*) buffer;
                         //  psr[0] is the transaction ID
-                        psr[1] = 0x8100; // If we wanted, we could set this to be 0x8103, to say "no such name" - but then if there's an AAAA query as well, that will cancel out an A query.
+                        psr[1] = 0x8100; // if we wanted, we could set this to be 0x8103, to say "no such name" - but then if there's an AAAA query as well, that will cancel out an A query.
                         // send the packet back at them.
                         sendto(sock, buffer, r, MSG_NOSIGNAL, (struct sockaddr*) &sender, sl);
                 }
@@ -753,7 +751,7 @@ int main(int argc, char *argv[])
                 default:
                 case '?':
                         fprintf(stderr, "error: usage: minimdnsd [-r] [-h hostname override]\n");
-                        return -5;
+                        exit(1);
                 }
         }
 
@@ -772,7 +770,7 @@ int main(int argc, char *argv[])
 
         if (resolver < 0) {
                 fprintf(stderr, "error: resolver requested but unavailable\n");
-                return -5;
+                exit(1);
         }
 
         if (resolver) {
@@ -782,7 +780,7 @@ int main(int argc, char *argv[])
                 int optval = 1;
                 if (setsockopt(resolver, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof( optval)) != 0) {
                         fprintf(stderr, "warning: could not set SO_REUSEPORT on resolver\n");
-                        return -5;
+                        exit(1);
                 }
 
                 struct sockaddr_in sin_resolve = {
@@ -794,7 +792,7 @@ int main(int argc, char *argv[])
 
                 if (bind(resolver, (struct sockaddr *) &sin_resolve, sizeof(sin_resolve)) == -1) {
                         fprintf(stderr, "error: could not bind to IPv4 MDNS port (%d %s)\n", errno, strerror(errno));
-                        return -5;
+                        exit(1);
                 }
 
                 printf("resolver configured on \"%s\"\n", RESOLVER_IP);
@@ -820,9 +818,9 @@ int main(int argc, char *argv[])
         }
 #endif
 
-        /* not just avahi, but other services, too will bind to 5353, but we can
+        /* not just avahi, but other services, too will bind to udp/53, but we can
          * use SO_REUSEPORT to allow multiple people to bind simultaneously, but
-         * all binds must use set opt SO_REUSEPORT to be successful */
+         * all binds (event theirs) must use set opt SO_REUSEPORT */
         int optval = 1;
         if (setsockopt(sdsock, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof( optval)) != 0) {
                 fprintf(stderr, "warning: could not set SO_REUSEPORT\n");
@@ -837,14 +835,14 @@ int main(int argc, char *argv[])
         if (setsockopt(sdsock, IPPROTO_IP, IP_PKTINFO, &optval, sizeof( optval)) != 0) {
                 fprintf(stderr, "error: kernel version must be greater than 2.6.14 "
                                 "to support IP_PKTINFO on a socket\n");
-                return -9;
+                exit(1);
         }
 
 #if (DISABLE_IPV6 == 0)
         if (is_bound_6 && setsockopt(sdsock, IPPROTO_IPV6, IPV6_RECVPKTINFO, &optval, sizeof( optval)) != 0) {
                 fprintf(stderr, "error: kernel version must be greater than 2.6.14 "
                                 "to support IPV6_RECVPKTINFO on IPv6 socket\n");
-                return -9;
+                exit(1);
         }
 #endif
 
@@ -892,10 +890,7 @@ int main(int argc, char *argv[])
                 }
         }
 
-        // Some things online recommend using IPPROTO_IP, IP_MULTICAST_LOOP
-        // But, we can just ignore the replies.
-
-        int r;
+        int r = 0;
         do {
                 int failcount = 0;
                 r = request_interfaces();
@@ -926,7 +921,7 @@ int main(int argc, char *argv[])
                 if (r < 0) {
                         fprintf(stderr, "error: poll = %d failed (%d %s)\n",
                                 r, errno, strerror(errno));
-                        return -10;
+                        exit(1);
                 }
 
                 if (fds[0].revents) {
@@ -936,7 +931,7 @@ int main(int argc, char *argv[])
 
                         if (fds[0].revents & (POLLHUP | POLLERR)) {
                                 fprintf(stderr, "error: IPv6 socket experienced fault\n");
-                                return -14;
+                                exit(1);
                         }
                 }
 
@@ -946,7 +941,7 @@ int main(int argc, char *argv[])
                         }
                         if (fds[1].revents & (POLLHUP | POLLERR)) {
                                 fprintf(stderr, "error: NETLINK socket experienced fault\n");
-                                return -14;
+                                exit(1);
                         }
                 }
 
@@ -956,6 +951,7 @@ int main(int argc, char *argv[])
                         r = r;
                         initialize_hostname();
                 }
+
                 if (fds[3].revents) {
                         if (fds[3].revents & POLLIN) {
                                 handle_message_recv(resolver, 1);
@@ -963,7 +959,7 @@ int main(int argc, char *argv[])
 
                         if (fds[3].revents & (POLLHUP | POLLERR)) {
                                 fprintf(stderr, "error: resolver socket experienced fault\n");
-                                return -14;
+                                exit(1);
                         }
                 }
 
@@ -975,5 +971,6 @@ int main(int argc, char *argv[])
                         wait3(&wstat, WNOHANG, NULL);
                 }
         }
-        return 0;
+
+        exit(0);
 }
