@@ -15,6 +15,7 @@ bin/$(PACKAGE): $(SOURCES)
 check:
 	bin/minimdnsd 2>&1 &
 	bin/minimdnsd -h override 2>&1 &
+	sleep 1
 	ping -c 1 $(shell cat /etc/hostname).local # Ok, doesn't actually test anything
 	ping -c 1 override.local # Ok so it tests the override feature
 	killall minimdnsd
