@@ -76,6 +76,7 @@ deb: bin/minimdnsd
 	chmod 775 $(PACKAGE)/DEBIAN/prerm
 
 	dpkg-deb --build $(PACKAGE)
+	mv $(PACKAGE).deb $(PACKAGE)$(RCV)-$(VERSION).deb
 
 
 ## For manual installation override
