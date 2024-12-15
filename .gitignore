@@ -44,3 +44,6 @@ configure~
 build-aux
 src/config.h.in~
 nbproject
+minimdnsd/*
+minimdns
+*.deb

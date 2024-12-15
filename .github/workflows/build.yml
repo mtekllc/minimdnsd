@@ -15,13 +15,15 @@ jobs:
       run: |
         sudo apt-get install -y \
           make \
-          build-essential
+          build-essential \
+          libcriterion-dev \
+          iputils-ping
     - name: Build
       run: |
         ./bootstrap.sh \
           ./configure \
           make \
-          make test \
+          make check \
           make deb \
     - name: Archive production artifacts
       uses: actions/upload-artifact@v4
