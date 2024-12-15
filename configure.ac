@@ -2,7 +2,7 @@ AC_PREREQ([2.69])
 m4_define([name], m4_esyscmd([grep -Po '(?<=^name=).*' proj | tr -d '\n']))
 m4_define([version], m4_esyscmd([grep -Po '(?<=(^version=)).*' proj | tr -d '\n']))
 m4_define([bugs], m4_esyscmd([grep -Po '(?<=(^bugs=)).*' proj | tr -d '\n']))
-AC_INIT(m4_defn([name]),m4_defn([version]),m4_defn([version]))
+AC_INIT(m4_defn([name]),m4_defn([version]),m4_defn([bugs]))
 
 AC_CONFIG_HEADERS([src/config.h])
 AC_DEFINE([_GNU_SOURCE], [1], [gnu extensions])

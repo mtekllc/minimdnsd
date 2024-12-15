@@ -20,14 +20,14 @@ check:
 	killall minimdnsd
 
 clean-local:
-	rm -rf bin/$(PACKAGE) ./minimdnsd/*
+	rm -rf bin/$(PACKAGE) ./minimdnsd/* ./dist/
 
 install-exec-local:
 	install -m 0755 $(@D)/bin/$(PACKAGE) $(TARGET_DIR)/usr/sbin/$(PACKAGE)
 
 deb: bin/minimdnsd
-	rm -rf $(PACKAGE)
-	mkdir -p $(PACKAGE)/DEBIAN
+	rm -rf ./$(PACKAGE)/
+	mkdir -p dist $(PACKAGE)/DEBIAN
 
 	mkdir -p $(PACKAGE)/usr/sbin
 	cp -v bin/minimdnsd $(PACKAGE)/usr/sbin/
@@ -43,7 +43,7 @@ deb: bin/minimdnsd
 	echo "Section: base" >> $(PACKAGE)/DEBIAN/control
 	echo "Priority: optional" >> $(PACKAGE)/DEBIAN/control
 	echo "Architecture: $(shell dpkg --print-architecture)" >> $(PACKAGE)/DEBIAN/control
-	echo "Maintainer: cnlohr <lohr85@gmail.com>" >> $(PACKAGE)/DEBIAN/control
+	echo "Maintainer: Maintainer <$(PACKAGE_BUGREPORT)>" >> $(PACKAGE)/DEBIAN/control
 	echo "Description: Bare bones MDNS server" >> $(PACKAGE)/DEBIAN/control
 	echo "#!/bin/sh" > $(PACKAGE)/DEBIAN/postinst
 	echo "set -e" >> $(PACKAGE)/DEBIAN/postinst
@@ -75,8 +75,7 @@ deb: bin/minimdnsd
 	echo "exit 0" >> $(PACKAGE)/DEBIAN/postinst
 	chmod 775 $(PACKAGE)/DEBIAN/prerm
 
-	dpkg-deb --build $(PACKAGE)
-	mv $(PACKAGE).deb $(PACKAGE)$(RCV)-$(VERSION).deb
+	dpkg-deb --build $(PACKAGE) ./dist
 
 
 ## For manual installation override

@@ -19,14 +19,14 @@ jobs:
           build-essential
     - name: Build
       run: |
-        ./bootstrap.sh \
-          ./configure \
-          make \
-          make deb \
+          ./bootstrap.sh
+          ./configure
+          make
+          make deb
     - name: Release
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          minimdnsd*.deb
+          dist/minimdnsd_*.deb
       env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

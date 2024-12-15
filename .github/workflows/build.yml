@@ -32,4 +32,4 @@ jobs:
       with:
         name: deb-file
         path: |
-          minimdnsd*.deb
+          dist/minimdnsd_*.deb
