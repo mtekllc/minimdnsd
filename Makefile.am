@@ -4,7 +4,6 @@ SOURCEDIR=src
 SOURCES := $(shell find $(SOURCEDIR) -name '*.c')
 OBJS = $(patsubst src/%.c,obj/%.o,$(SOURCES))
 
-# overwrite c flags to enable debugging
 CFLAGS+=-Wall -Wno-unused-but-set-variable
 
 all: bin/$(PACKAGE)
@@ -17,6 +16,7 @@ check:
 	bin/minimdnsd &
 	bin/minimdnsd -h override &
 	ping -c 1 $(shell cat /etc/hostname).local # Ok, doesn't actually test anything
+	ping -c 1 override.local # Ok so it tests the override feature
 	killall minimdnsd
 
 clean-local:
