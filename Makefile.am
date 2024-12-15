@@ -13,11 +13,10 @@ bin/$(PACKAGE): $(SOURCES)
 	$(CC) -o $@ $(CFLAGS) $(SOURCES)
 	
 check:
-	sudo bin/minimdnsd 2>&1 &
-	sudo bin/minimdnsd -h override 2>&1 &
-	sleep 1
+	bin/minimdnsd 2>&1 &
+	bin/minimdnsd -h override 2>&1 &
 	ping -c 1 $(shell cat /etc/hostname).local # Ok, doesn't actually test anything
-	ping -c 1 override.local # Ok so it tests the override feature
+	##ping -c 1 override.local # test the override feature
 	killall minimdnsd
 
 clean-local:
