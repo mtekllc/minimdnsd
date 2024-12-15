@@ -46,8 +46,10 @@ Primarily MDNS Hostname responder - i.e. run this, and any computer on your netw
  * build-essential (make + GCC + system headers)
 
 ### Build process
- * `make`
- * or, optionally `make install` to install it to /usr/local/bin/minimdnsd, and install the initd service
+```
+./bootstrap.sh && ./configure && make
+```
+ ** Optionally execute `make install` to install `minimdnsd` to your local system including systemd service file.
 
 ## Long-Term
 

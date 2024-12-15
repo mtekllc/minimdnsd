@@ -1,39 +1,38 @@
-all : minimdnsd
+ACLOCAL_AMFLAGS = -I m4 --install
 
-PACKAGE_VERSION:=0.1-$(shell cat .github/build_number)
-PACKAGE:=minimdnsd_$(PACKAGE_VERSION)
+SOURCEDIR=src
+SOURCES := $(shell find $(SOURCEDIR) -name '*.c')
+OBJS = $(patsubst src/%.c,obj/%.o,$(SOURCES))
 
-SHELL=/bin/bash
+CFLAGS+=-Wall -Wno-unused-but-set-variable
 
-CFLAGS:=-Wall -pedantic -Os -g -flto -ffunction-sections -Wl,--gc-sections -fdata-sections
+all: bin/$(PACKAGE)
 
-minimdnsd : minimdnsd.c
-	echo $(shell expr 1 + $(shell cat .github/build_number)) > .github/build_number
-	gcc -o $@ $^ $(CFLAGS)
-	size $@
-
-install : minimdnsd
-	sudo install minimdnsd /usr/local/bin/
-	sudo cp minimdnsd.service /etc/systemd/system
-	sudo systemctl daemon-reload
-	sudo systemctl enable minimdnsd.service
-	sudo service minimdnsd restart
-	cat minimdnsd.1 | gzip > /usr/share/man/man1/minimdnsd.1.gz
-
-test : minimdnsd
-	./minimdnsd &
-	./minimdnsd -h testminimdnsd &
+bin/$(PACKAGE): $(SOURCES)
+	mkdir -p bin
+	$(CC) -o $@ $(CFLAGS) $(SOURCES)
+	
+check:
+	bin/minimdnsd 2>&1 &
+	bin/minimdnsd -h override 2>&1 &
 	ping -c 1 $(shell cat /etc/hostname).local # Ok, doesn't actually test anything
+	##ping -c 1 override.local # test the override feature
 	killall minimdnsd
 
-deb : minimdnsd
-	rm -rf $(PACKAGE)
-	mkdir -p $(PACKAGE)/DEBIAN
+clean-local:
+	rm -rf bin/$(PACKAGE) ./minimdnsd/* ./dist/
 
-	mkdir -p $(PACKAGE)/usr/bin
-	cp minimdnsd $(PACKAGE)/usr/bin/
+install-exec-local:
+	install -m 0755 $(@D)/bin/$(PACKAGE) $(TARGET_DIR)/usr/sbin/$(PACKAGE)
+
+deb: bin/minimdnsd
+	rm -rf ./$(PACKAGE)/
+	mkdir -p dist $(PACKAGE)/DEBIAN
+
+	mkdir -p $(PACKAGE)/usr/sbin
+	cp -v bin/minimdnsd $(PACKAGE)/usr/sbin/
 	mkdir -p $(PACKAGE)/etc/systemd/system
-	cp minimdnsd $(PACKAGE)/etc/systemd/system/
+	cp -v minimdnsd.service $(PACKAGE)/etc/systemd/system/
 	mkdir -p $(PACKAGE)/usr/share/man/man1
 	cat minimdnsd.1 | gzip > $(PACKAGE)/usr/share/man/man1/minimdnsd.1.gz
 
@@ -44,7 +43,7 @@ deb : minimdnsd
 	echo "Section: base" >> $(PACKAGE)/DEBIAN/control
 	echo "Priority: optional" >> $(PACKAGE)/DEBIAN/control
 	echo "Architecture: $(shell dpkg --print-architecture)" >> $(PACKAGE)/DEBIAN/control
-	echo "Maintainer: cnlohr <lohr85@gmail.com>" >> $(PACKAGE)/DEBIAN/control
+	echo "Maintainer: Maintainer <$(PACKAGE_BUGREPORT)>" >> $(PACKAGE)/DEBIAN/control
 	echo "Description: Bare bones MDNS server" >> $(PACKAGE)/DEBIAN/control
 	echo "#!/bin/sh" > $(PACKAGE)/DEBIAN/postinst
 	echo "set -e" >> $(PACKAGE)/DEBIAN/postinst
@@ -76,12 +75,9 @@ deb : minimdnsd
 	echo "exit 0" >> $(PACKAGE)/DEBIAN/postinst
 	chmod 775 $(PACKAGE)/DEBIAN/prerm
 
-	dpkg-deb --build $(PACKAGE)
+	dpkg-deb --build $(PACKAGE) ./dist
 
 
-	# For manual installation override
-	#mkdir -p $(PACKAGE)/etc/systemd/system/multi-user.target.wants/
-	#cd $(PACKAGE)/etc/systemd/system/multi-user.target.wants && ln -s ../minimdnsd.service . || true
-
-clean :
-	rm -rf minimdnsd minimdnsd_* -rf
+## For manual installation override
+## mkdir -p $(PACKAGE)/etc/systemd/system/multi-user.target.wants/
+## cd $(PACKAGE)/etc/systemd/system/multi-user.target.wants && ln -s ../minimdnsd.service . || true

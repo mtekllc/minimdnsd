@@ -3,8 +3,8 @@ permissions:
   contents: write
 on:
   push:
-    tags:
-      - '*'           # Push events to every tag not containing /
+    branches:
+      - master
 jobs:
   Build-for-Linux:
     runs-on: ubuntu-latest
@@ -18,11 +18,15 @@ jobs:
           make \
           build-essential
     - name: Build
-      run: make clean test deb
+      run: |
+          ./bootstrap.sh
+          ./configure
+          make
+          make deb
     - name: Release
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          minimdnsd_*.deb
+          dist/minimdnsd_*.deb
       env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
