@@ -21,7 +21,7 @@ AC_CONFIG_MACRO_DIR([m4])
 
 AM_INIT_AUTOMAKE([foreign subdir-objects -Wno-error -Wno-portability])
 
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([Makefile minimdnsd.1])
 
 # Checks for programs.
 AC_PROG_CC
