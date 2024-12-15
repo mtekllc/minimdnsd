@@ -20,11 +20,11 @@ jobs:
           iputils-ping
     - name: Build
       run: |
-        ./bootstrap.sh \
-          ./configure \
-          make \
-          make check \
-          make deb \
+          ./bootstrap.sh
+          ./configure
+          make
+          make check
+          make deb
     - name: Archive production artifacts
       uses: actions/upload-artifact@v4
       with:
