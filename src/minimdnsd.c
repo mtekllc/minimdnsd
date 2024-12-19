@@ -306,9 +306,9 @@ static void handle_netlink_recv()
         struct nlmsghdr *nlh = NULL;
         char buffer[4096] = {0};
 
-        nlh = (struct nlmsghdr *) buffer;
+        nlh = (struct nlmsghdr *)buffer;
 
-        while ((len = recv(sdifaceupdown, nlh, 4096, MSG_DONTWAIT)) > 0) {
+        while ((len = recv(sdifaceupdown, nlh, sizeof(buffer), MSG_DONTWAIT)) > 0) {
                 // technique is based around https://stackoverflow.com/a/2353441/2926815
                 while ((NLMSG_OK(nlh, len)) && (nlh->nlmsg_type != NLMSG_DONE)) {
                         if (nlh->nlmsg_type == RTM_NEWADDR) {
@@ -345,6 +345,7 @@ static void handle_netlink_recv()
                         }
                         nlh = NLMSG_NEXT(nlh, len);
                 }
+                nlh = (struct nlmsghdr *)buffer; // re-align with buffer
         }
 }
 
